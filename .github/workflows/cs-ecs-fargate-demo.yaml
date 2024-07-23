@@ -54,7 +54,7 @@ jobs:
         -cid ${{ secrets.FALCON_CID }} \
         -image $ECR_REGISTRY/$FALCON_IMAGE \
         -pulltoken $(echo "{\"auths\":{\"${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com\":{\"auth\":\"$(echo AWS:$(aws ecr get-login-password)|base64 -w 0)\"}}}" | base64 -w 0) \
-        -cloudformationParams "ParameterKey=AppImagePath,ParameterValue=${ECR_REGISTRY}/${FALCON_IMAGE}:latest" \
+        -cloudformationParams "ParameterKey=AppImagePath,ParameterValue=${ECR_REGISTRY}/${FALCON_IMAGE}" \
         -ecs-spec-file /root/cloudformation.yaml > cloudformationwithfalcon.yaml
         cat cloudformationwithfalcon.yaml
         
@@ -65,5 +65,5 @@ jobs:
         --change-set-type CREATE \
         --change-set-name "crowdstrike-ecs-fargate-demo-commit-${{ env.GITHUB_SHA }}" \
         --template-body file://cloudformationwithfalcon.yaml \
-        --parameters "ParameterKey=AppImagePath,ParameterValue=${ECR_REGISTRY}/${FALCON_IMAGE}:latest" \
+        --parameters "ParameterKey=AppImagePath,ParameterValue=${ECR_REGISTRY}/${FALCON_IMAGE}" \
         --capabilities CAPABILITY_IAM
