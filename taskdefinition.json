@@ -1,10 +1,11 @@
 {
-    "family": "java_repo",
-    "networkMode": "awsvpc",
+    "family": "java_repo", 
+    "networkMode": "awsvpc", 
     "containerDefinitions": [
         {
-            "name": "java",
-            "image": "#AWSACCOUNTID#.dkr.ecr.us-east-1.amazonaws.com/java_repo:latest",
+            "name": "java", 
+            "image": "#AWSACCOUNTID#.dkr.ecr.us-east-1.amazonaws.com/java_repo:latest", 
+            "essential": true,
             "portMappings": [
                 {
                     "containerPort": 8443,
@@ -12,26 +13,22 @@
                     "protocol": "tcp"
                 }
             ],
-            "essential": true,
+            "readonlyRootFilesystem": true,
             "logConfiguration": {
                 "logDriver": "awslogs",
                 "options": {
-                    "awslogs-group": "/ecs/java_repo",
-                    "awslogs-create-group": "true",
+                    "awslogs-group": "ecs-fargate-pipeline-demo-app",
                     "awslogs-region": "us-east-1",
-                    "awslogs-stream-prefix": "ecs"
+                    "awslogs-create-group": "true",
+                    "awslogs-stream-prefix": "demo-app"
                 }
             }
         }
-    ],
+    ], 
     "requiresCompatibilities": [
         "FARGATE"
-    ],
-    "cpu": "512",
-    "memory": "1024",
-    "executionRoleArn": "arn:aws:iam::#AWSACCOUNTID#:role/ECSTaskExecutionRole",
-    "runtimePlatform": {
-        "cpuArchitecture": "X86_64",
-        "operatingSystemFamily": "LINUX"
-    }
+    ], 
+    "cpu": "256", 
+    "memory": "512",
+    "executionRoleArn": "arn:aws:iam::#AWSACCOUNTID#:role/ECSTaskExecutionRole"
 }
