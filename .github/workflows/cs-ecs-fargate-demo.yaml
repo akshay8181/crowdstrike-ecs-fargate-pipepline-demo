@@ -27,43 +27,94 @@ jobs:
 
     - name: ECR Login
       uses: aws-actions/amazon-ecr-login@v2
+    
+    - name: Fetch latest task definition
+      id: fetch_task_definition
+      run: |
+        SERVICE_NAME="java"
+        CLUSTER_NAME="javapoc"
+        CONTAINER_NAME="java-narendra"
 
-    # Patch ECS Task Definition Format (sed used to prevent commiting AWS Account ID)
-    - name: Patch ECS Task Defintion with CrowdStrike Falcon ECS Patching utility
-      run: |
-        sed -i 's/#AWSACCOUNTID#/${{ secrets.AWS_ACCOUNT_ID }}/g' taskdefinition.json
-        docker run \
-        --mount type=bind,source=$(pwd)/taskdefinition.json,target=/root/taskdefinition.json \
-        --rm $ECR_REGISTRY/$FALCON_IMAGE \
-        -cid ${{ secrets.FALCON_CID }} \
-        -image $ECR_REGISTRY/$FALCON_IMAGE \
-        -pulltoken $(echo "{\"auths\":{\"${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com\":{\"auth\":\"$(echo AWS:$(aws ecr get-login-password)|base64 -w 0)\"}}}" | base64 -w 0) \
-        -ecs-spec-file /root/taskdefinition.json > taskdefinitionwithfalcon.json
-        cat taskdefinitionwithfalcon.json
-    
-    - name: Upload CrowdStrike Falcon Patched ECS Task Definition to ECS
-      run: |
-        aws ecs register-task-definition --cli-input-json file://taskdefinitionwithfalcon.json 1>/dev/null    
-    
-    # Patch CloudFormation Format Sample using Parameters for Image URI (Requires Falcon Container 6.53+)
-    - name: Patch CloudFormation with CrowdStrike Falcon ECS Patching utility
-      run: |
-        docker run \
-        --mount type=bind,source=$(pwd)/cloudformation.yaml,target=/root/cloudformation.yaml \
-        --rm $ECR_REGISTRY/$FALCON_IMAGE \
-        -cid ${{ secrets.FALCON_CID }} \
-        -image $ECR_REGISTRY/$FALCON_IMAGE \
-        -pulltoken $(echo "{\"auths\":{\"${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com\":{\"auth\":\"$(echo AWS:$(aws ecr get-login-password)|base64 -w 0)\"}}}" | base64 -w 0) \
-        -cloudformationParams "ParameterKey=AppImagePath,ParameterValue=${ECR_REGISTRY}/${FALCON_IMAGE}" \
-        -ecs-spec-file /root/cloudformation.yaml > cloudformationwithfalcon.yaml
-        cat cloudformationwithfalcon.yaml
+        # Fetch the latest task definition ARN for the given service
+        TASK_DEFINITION_ARN=$(aws ecs describe-services --cluster $CLUSTER_NAME --services $SERVICE_NAME --query 'services[0].taskDefinition' --output text)
+
+        echo "Latest Task Definition ARN: $TASK_DEFINITION_ARN"
+
+        # Fetch the task definition details
+        TASK_DEFINITION=$(aws ecs describe-task-definition --task-definition $TASK_DEFINITION_ARN)
+
+        # Extract the container definition using jq
+        IMAGE_TAG=$(echo $TASK_DEFINITION | jq -r --arg CONTAINER_NAME "$CONTAINER_NAME" '.taskDefinition.containerDefinitions[] | select(.name == $CONTAINER_NAME) | .image' | awk -F ':' '{print $2}')
+
+        echo "Image Tag: $IMAGE_TAG"
+
+        echo "image_tag=$IMAGE_TAG" >> $GITHUB_ENV
+
+    - name: Output latest image tag
+      run: echo "The latest image tag for the container is ${{ env.image_tag }}"
         
-    - name: Create CloudFormation Change Set
-      run: |
-        aws cloudformation create-change-set \
-        --stack-name crowdstrike-ecs-fargate-demo \
-        --change-set-type CREATE \
-        --change-set-name "crowdstrike-ecs-fargate-demo-commit-${{ env.GITHUB_SHA }}" \
-        --template-body file://cloudformationwithfalcon.yaml \
-        --parameters "ParameterKey=AppImagePath,ParameterValue=${ECR_REGISTRY}/${FALCON_IMAGE}" \
-        --capabilities CAPABILITY_IAM
+
+    # # Patch ECS Task Definition Format (sed used to prevent commiting AWS Account ID)
+    # - name: Patch ECS Task Defintion with CrowdStrike Falcon ECS Patching utility
+    #   run: |
+    #     sed -i 's/#AWSACCOUNTID#/${{ secrets.AWS_ACCOUNT_ID }}/g' taskdefinition.json
+    #     docker run \
+    #     --mount type=bind,source=$(pwd)/taskdefinition.json,target=/root/taskdefinition.json \
+    #     --rm $ECR_REGISTRY/$FALCON_IMAGE \
+    #     -cid ${{ secrets.FALCON_CID }} \
+    #     -image $ECR_REGISTRY/$FALCON_IMAGE \
+    #     -pulltoken $(echo "{\"auths\":{\"${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com\":{\"auth\":\"$(echo AWS:$(aws ecr get-login-password)|base64 -w 0)\"}}}" | base64 -w 0) \
+    #     -ecs-spec-file /root/taskdefinition.json > taskdefinitionwithfalcon.json
+    #     cat taskdefinitionwithfalcon.json
+    
+    # - name: Upload CrowdStrike Falcon Patched ECS Task Definition to ECS
+    #   run: |
+    #     aws ecs register-task-definition --cli-input-json file://taskdefinitionwithfalcon.json 1>/dev/null    
+    
+    # # Patch CloudFormation Format Sample using Parameters for Image URI (Requires Falcon Container 6.53+)
+    # - name: Patch CloudFormation with CrowdStrike Falcon ECS Patching utility
+    #   run: |
+    #     docker run \
+    #     --mount type=bind,source=$(pwd)/cloudformation.yaml,target=/root/cloudformation.yaml \
+    #     --rm $ECR_REGISTRY/$FALCON_IMAGE \
+    #     -cid ${{ secrets.FALCON_CID }} \
+    #     -image $ECR_REGISTRY/$FALCON_IMAGE \
+    #     -pulltoken $(echo "{\"auths\":{\"${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com\":{\"auth\":\"$(echo AWS:$(aws ecr get-login-password)|base64 -w 0)\"}}}" | base64 -w 0) \
+    #     -cloudformationParams "ParameterKey=AppImagePath,ParameterValue=${ECR_REGISTRY}/${FALCON_IMAGE}" \
+    #     -ecs-spec-file /root/cloudformation.yaml > cloudformationwithfalcon.yaml
+    #     cat cloudformationwithfalcon.yaml
+        
+    # - name: Create CloudFormation Change Set
+    #   run: |
+    #     aws cloudformation create-change-set \
+    #     --stack-name crowdstrike-ecs-fargate-demo \
+    #     --change-set-type CREATE \
+    #     --change-set-name "crowdstrike-ecs-fargate-demo-commit-${{ env.GITHUB_SHA }}" \
+    #     --template-body file://cloudformationwithfalcon.yaml \
+    #     --parameters "ParameterKey=AppImagePath,ParameterValue=${ECR_REGISTRY}/${FALCON_IMAGE}" \
+    #     --capabilities CAPABILITY_IAM
+# name: Fetch ECS Container Image Tag
+
+# on:
+#   push:
+#     branches:
+#       - main
+#   workflow_dispatch:
+
+# jobs:
+#   fetch-image-tag:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v3
+
+#       - name: Configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@v2
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_REGION }}
+
+
+    
